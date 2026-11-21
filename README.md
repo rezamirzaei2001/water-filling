@@ -1,182 +1,176 @@
+# Water-Filling vs. Uniform Power Allocation in Rayleigh Fading Channels
 
-# Water-Filling Power Allocation in Discrete Fading Channels
+**MATLAB simulation | Four parallel subchannels | Ergodic capacity | Outage capacity | Outage probability**
 
-A MATLAB simulation comparing **optimal water-filling power allocation** with **uniform power allocation** for a discrete-state fading channel under an average transmit-power constraint.
+This project compares **uniform power allocation** with **instantaneous water-filling** over four independent parallel Rayleigh-fading subchannels. It uses Monte Carlo simulation to study how channel-aware power allocation changes spectral efficiency and outage performance under a **fixed total transmit-power constraint for each channel realization**.
 
-## Overview
+## Highlights
 
-Wireless channel quality varies over time due to fading. When the transmitter and receiver both know the instantaneous channel state (perfect CSI), the transmitter can adapt its power to improve the average achievable rate.
-
-This project evaluates two strategies:
-
-- **Uniform allocation:** transmit with the same power in every fading state.
-- **Water-filling allocation:** adapt power to the channel gain, potentially transmitting no power in poor channel states.
-
-The simulation uses a finite set of **mutually exclusive temporal fading states**, not simultaneously active parallel subchannels.
+- Simulates **20,000** independent realizations of four Rayleigh-fading subchannels.
+- Solves the water-filling power-allocation problem using **65 iterations of bisection** per realization (vectorized across realizations).
+- Compares instantaneous and ergodic spectral efficiency, 10% outage capacity, outage probability, and empirical capacity CDF.
+- Automatically saves **five figures** to `Figures/`.
+- Uses a fixed MATLAB random seed for reproducibility and a custom quantile function (no Statistics and Machine Learning Toolbox required).
 
 ## System Model
 
-For channel state $i$:
+For subchannel $i$, let the complex channel coefficient and power gain be
 
 $$
-y_i = h_i x_i + n_i, \qquad g_i = |h_i|^2.
+h_i \sim \mathcal{CN}(0,1), \qquad g_i = |h_i|^2.
 $$
 
-Let $p_i$ be the probability of state $i$, $P_i$ the transmit power used in that state, and $N$ the receiver noise power. The average spectral efficiency is
+Consequently, $g_i$ has an exponential distribution with unit mean. The code generates these gains via inverse-transform sampling: `g = -log(max(rand(numTrials,N),realmin));`.
+
+For $N=4$ subchannels, the normalized instantaneous spectral efficiency is
 
 $$
-C = \sum_{i=1}^{M} p_i \log_2\left(1 + \frac{g_i P_i}{N}\right)
+C(\mathbf{g},\mathbf{P}) = \frac{1}{N}\sum_{i=1}^{N}\log_2\left(1+\frac{g_iP_i}{N_0}\right).
 $$
 
-in bits/s/Hz, subject to
+The total power constraint is applied **separately to each realization**:
 
 $$
-\sum_{i=1}^{M} p_i P_i \leq \bar P,
-\qquad P_i \geq 0.
+\sum_{i=1}^{N}P_i=P_{\mathrm{total}}, \qquad P_i\geq0.
 $$
 
-> **Notation:** The MATLAB variable `N0` represents the noise **power** $N$ in this normalized model, not a noise power spectral density in W/Hz.
+The division by $N$ is intentional: reported capacities are **spectral efficiencies normalized by the number of equal-bandwidth subchannels**, not the unnormalized sum of their rates.
 
-### Uniform Power Allocation
+### Allocation strategies
 
-Because the states occur at different times and their probabilities sum to one, uniform allocation uses $P_i=\bar P$ in every state (rather than dividing $\bar P$ by the number of states):
-
-$$
-C_{\mathrm{uniform}} =
-\sum_i p_i \log_2\left(1+\frac{g_i\bar P}{N}\right).
-$$
-
-### Optimal Water-Filling Allocation
-
-The capacity-maximizing allocation is
+**Uniform allocation** assigns equal power to every subchannel:
 
 $$
-P_i^* = \left(\mu-\frac{N}{g_i}\right)^+,
-\qquad (z)^+ = \max(z,0),
+P_i^{\mathrm{U}}=\frac{P_{\mathrm{total}}}{N}.
 $$
 
-where the water level $\mu$ satisfies
+**Water-filling** maximizes instantaneous spectral efficiency for the observed channel gains:
 
 $$
-\sum_i p_i \left(\mu-\frac{N}{g_i}\right)^+ = \bar P.
+P_i^{\mathrm{WF}}=\max\left(\mu-\frac{N_0}{g_i},0\right),
 $$
 
-The code solves this equation numerically using **bisection**.
+where the water level $\mu$ is chosen to satisfy the total-power constraint. This strategy assumes **perfect instantaneous channel-state information at the transmitter (CSIT)**. It is not long-term temporal water-filling under an average-power-across-fading-states constraint.
 
-## Example Configuration
+## Simulation Parameters
 
 | Parameter | Value |
-|---|---|
-| Channel power gains, `g` | `[0.1 0.5 1 2]` |
-| State probabilities, `prob` | `[0.25 0.25 0.25 0.25]` |
-| Noise power, `N0` | `1` |
-| Average transmit power, `Pavg` | `1` |
-
-### Expected Results
-
-| Metric | Uniform | Water-Filling |
-|---|---:|---:|
-| State-wise transmit power | `[1 1 1 1]` | `[0 0.5 1.5 2]` |
-| Average transmit power | `1` | `1` |
-| Spectral efficiency | ~`0.827` bits/s/Hz | ~`0.991` bits/s/Hz |
-
-The water level is $\mu=2.5$. In this example, water-filling increases spectral efficiency by approximately **19.9%** relative to uniform allocation.
-
-The exact improvement depends on the channel-state gains, probabilities, noise power, and average-power budget.
-
-## Simulation Figures
-
-The following figures were generated for the four-state fading example above.
-
-All image paths are relative to the repository root, so they render directly on GitHub when the `figures/` directory is uploaded alongside this README.
-
-### 1. Power Allocation by Fading State
-
-![Uniform versus water-filling power allocation](Figures/power_allocation_comparison.png)
-
-Uniform allocation uses the same transmit power in all four states.
-
-Water-filling turns off transmission in the weakest state and allocates more power to stronger states while respecting the same **average** power constraint.
-
-### 2. Channel Capacity versus Average Transmit Power
-
-![Ergodic capacity versus average transmit power](Figures/capacity_vs_average_power.png)
-
-Both strategies improve as the available average power increases.
-
-Water-filling achieves at least the spectral efficiency of uniform allocation at each power level.
-
-### 3. Capacity Comparison at Normalized Average Power = 1
-
-![Capacity comparison for uniform and water-filling allocation](Figures/capacity_comparison.png)
-
-| Allocation | Capacity (bit/s/Hz) |
 |---|---:|
-| Uniform | 0.8269 |
-| Water-Filling | 0.9914 |
+| Number of subchannels | 4 |
+| Fading model | Independent Rayleigh fading; unit-mean exponential power gains |
+| Monte Carlo realizations | 20,000 |
+| Noise power per subchannel | 1 |
+| Baseline total transmit power | 4 |
+| Outage probability threshold | 10% |
+| Transmit-power sweep | 35 logarithmically spaced points, 0.1 to approximately 31.62 |
+| Target-rate sweep | 120 points, 0 to 3 bit/s/Hz |
+| Bisection iterations | 65 |
+| MATLAB random seed | `rng(42,'twister')` |
 
-**Relative improvement: 19.91%.**
+## Results and Interpretation
 
-Numerical values are calculated for the example parameters listed above.
+### Example: allocation across four unequal channels
 
-The underlying data are available in [`figures/simulation_results.txt`](Figures/simulation_results.txt).
+For a single illustrative channel realization,
 
-## MATLAB Implementation
+$$
+\mathbf{g}=[0.1,\ 0.5,\ 1,\ 2],
+$$
 
-The script:
+with $P_{\mathrm{total}}=4$ and $N_0=1$:
 
-1. Defines discrete fading-state gains and their probabilities.
-2. Computes the uniform-allocation capacity.
-3. Finds the water level using bisection under the average-power constraint.
-4. Calculates the optimal state-dependent transmit powers and capacity.
-5. Plots **power allocation by channel state**.
-6. Sweeps the average transmit power and plots **capacity versus average power** for both strategies.
+| Method | Subchannel 1 | Subchannel 2 | Subchannel 3 | Subchannel 4 |
+|---|---:|---:|---:|---:|
+| Uniform | 1 | 1 | 1 | 1 |
+| Water-filling | 0 | 0.5 | 1.5 | 2 |
 
-### Requirements
+Water-filling shuts off the weakest subchannel and reallocates its power to the stronger ones.
 
-- MATLAB with standard numerical and plotting functions (no specialized toolbox required).
+![Power allocation comparison](Figures/power_allocation_comparison.png)
 
-### Run
+### Ergodic capacity versus total transmit power
 
-1. Clone or download the repository.
-2. Open MATLAB and navigate to the project folder.
-3. Run the simulation script (recommended filename: `water_filling_discrete_fading.m`):
+The ergodic spectral efficiency is the mean of instantaneous spectral efficiencies across channel realizations:
 
-```matlab
-run('water_filling_discrete_fading.m')
-```
+$$
+C_{\mathrm{erg}}=\mathbb{E}_{\mathbf{g}}[C(\mathbf{g})].
+$$
 
-The script prints the capacities, water level, average allocated power, and percentage improvement, then displays two figures.
+Water-filling provides at least as much instantaneous capacity as uniform allocation under the same per-realization power constraint. The relative advantage is generally more pronounced at low power.
 
-## Suggested Repository Structure
+![Ergodic capacity versus power](Figures/ergodic_capacity_vs_power.png)
+
+### 10% outage capacity versus total transmit power
+
+The 10% outage capacity is estimated from the lower 10th percentile of the simulated instantaneous-capacity distribution. Higher values indicate that a higher target rate can be supported at approximately the same 10% outage level.
+
+![Outage capacity versus power](Figures/outage_capacity_vs_power.png)
+
+### Outage probability versus target rate
+
+For target rate $R$, outage occurs when the instantaneous capacity falls below $R$:
+
+$$
+P_{\mathrm{out}}(R)=\Pr(C<R).
+$$
+
+The probability of outage increases as the target rate rises. Since water-filling maximizes capacity for each channel realization, its outage probability is no greater than uniform allocation's at a fixed target rate.
+
+![Outage probability versus target rate](Figures/outage_probability_vs_rate.png)
+
+### Empirical capacity CDF
+
+The cumulative distribution function (CDF) describes the fraction of channel realizations whose instantaneous spectral efficiency is below a threshold. The water-filling curve shifts toward higher spectral efficiencies relative to uniform allocation.
+
+![Empirical capacity CDF](Figures/capacity_cdf.png)
+
+### Numerical results
+
+The following values are **illustrative estimates from an independent Monte Carlo run with equivalent model parameters**, rather than verified output from the supplied MATLAB random sequence. For exact reproducible figures, use the values printed in the MATLAB Command Window after running the script.
+
+| Metric at total power = 4 | Uniform | Water-filling |
+|---|---:|---:|
+| Ergodic spectral efficiency (bit/s/Hz) | 0.8602 | 0.9957 |
+| 10% outage spectral efficiency (bit/s/Hz) | 0.4795 | 0.6196 |
+
+The illustrative relative improvement is approximately **15.75%** in ergodic spectral efficiency and **29.21%** in 10% outage spectral efficiency. Monte Carlo estimates vary slightly with the random-number generator and realization sample.
+
+## Repository Structure
 
 ```text
-discrete-fading-water-filling-matlab/
+water-filling/
 ├── README.md
-├── water_filling_discrete_fading.m
-├── Figures/
-│   ├── power_allocation_comparison.png
-│   ├── capacity_vs_average_power.png
-│   ├── capacity_comparison.png
-│   └── simulation_results.txt
-└── LICENSE                   # Optional: choose a license
+├── water_filling_simulation.m
+├── SIMULATION_RESULTS.md          # Optional detailed report
+└── Figures/
+    ├── power_allocation_comparison.png
+    ├── ergodic_capacity_vs_power.png
+    ├── outage_capacity_vs_power.png
+    ├── outage_probability_vs_rate.png
+    └── capacity_cdf.png
 ```
 
-## Assumptions and Limitations
+## How to Run
 
-- Perfect, instantaneous CSI is available at both transmitter and receiver.
-- Channel-state probabilities and gains are known and fixed during the optimization.
-- The constraint is on **average transmit power**, not a per-state peak-power limit.
-- Noise power is identical across channel states.
-- Capacity is an average spectral-efficiency metric for the idealized Gaussian fading model; practical coding, estimation errors, and implementation overhead are not simulated.
-- This is a **discrete-state temporal fading** model. For simultaneous parallel frequency channels, the power-budget formulation and uniform-allocation baseline must be adjusted.
+1. Open MATLAB (R2016b or newer for local functions in scripts).
+2. Set the current folder to the repository root.
+3. Run:
 
-## Background
+   ```matlab
+   water_filling_simulation
+   ```
 
-This project illustrates the power-adaptation concepts covered in:
+4. Read the printed ergodic and 10% outage capacities in the Command Window.
+5. Find the five generated PNG files in `Figures/`.
 
-Andrea Goldsmith, *Wireless Communications*, Cambridge University Press, 2005, Chapter 4 (Capacity of Wireless Channels).
+The script checks that water-filling satisfies the total-power constraint and never produces a lower instantaneous capacity than uniform allocation, up to numerical tolerance.
 
-## License
+## Limitations
 
-No license is included by default. Add a `LICENSE` file if you want to define reuse and redistribution permissions.
+The model assumes independent fading across subchannels, equal noise power, perfect CSIT, ideal capacity-achieving coding, and no channel-estimation or feedback overhead. Its results characterize a **per-realization total-power-constrained** system and should not be interpreted as results for long-term average-power adaptation across fading states.
+
+## Conclusion
+
+For four parallel Rayleigh-fading subchannels, instantaneous water-filling uses channel-state information to redistribute power toward stronger subchannels. Under the simulated per-realization power constraint, this maximizes instantaneous spectral efficiency, improves or preserves ergodic and outage capacities, and does not increase outage probability relative to uniform allocation.
+
+**Keywords:** Water-Filling, Rayleigh Fading, Parallel Channels, Power Allocation, Monte Carlo, MATLAB, Ergodic Capacity, Outage Capacity.
